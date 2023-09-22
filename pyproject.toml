@@ -1,0 +1,33 @@
+[build-system]
+requires = ['setuptools', 'wheel']
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["astro"]
+namespaces = true
+
+[project]
+name = "camerpi.py"
+version = "2023.9.21-dev"
+description = "Astrophotography friendly front end for libcamera."
+requires-python = ">=3.8"
+license = { text = "Proprietary"}
+classifiers=[
+    'Development Status :: 4 - Beta',
+    'License :: OSI Approved :: GNU Affero General Public License v3',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+]
+dependencies = [
+    "click",
+    "picamera2",
+]
+
+[project.scripts]
+camerpi = "astro.camerpi.__main__:main"
