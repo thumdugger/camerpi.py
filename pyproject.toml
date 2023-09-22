@@ -11,14 +11,13 @@ namespaces = true
 name = "camerpi.py"
 version = "2023.9.21-dev"
 description = "Astrophotography friendly front end for libcamera."
-requires-python = ">=3.8"
-license = { text = "Proprietary"}
+requires-python = ">=3.9"
+license = { text = "GNU Affero General Public License v3"}
 classifiers=[
     'Development Status :: 4 - Beta',
     'License :: OSI Approved :: GNU Affero General Public License v3',
     'Operating System :: OS Independent',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
@@ -30,4 +29,4 @@ dependencies = [
 ]
 
 [project.scripts]
-camerpi = "astro.camerpi.__main__:main"
+camerpi = "astro.camerpi.__main__:camperpi"
