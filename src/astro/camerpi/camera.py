@@ -154,15 +154,16 @@ def camera_still_cmd(exposure, still_timeout, still_iso, still_do_raw, still_do_
     
     if exposure.startswith("1/"):
         exposure_us = int(1.0/int(exposure[2:]) * 1_000_000)
-    elif exposure.endswith('"'):
-        exposure_us = int(exposure[:-1]) * 1_000_000
+    elif exposure.endswith('"') or exposure.endswith('s'):
+        exposure_us = int(float(exposure[:-1]) * 1_000_000)
     else:
         exposure_us = int(1.0/int(exposure) * 1_000_000)
     
     camera_cmd = [
         "libcamera-still",
         "--mode",
-        "4056:3040:12:P",
+        "8000:6000:10:P",
+        #"9152:6944:12:P",
         "-n",
         f"-t {still_timeout}" if still_timeout else "",
         "--shutter",
@@ -185,21 +186,21 @@ def camera_still_cmd(exposure, still_timeout, still_iso, still_do_raw, still_do_
     "--exposure-time",
     "-e",
     "timelapse_exposure_time",
-    type=float,
+    type=str,
     required=True,
     help="Set exposure time in seconds")
 @click.option(
     "--pause-time",
-    "-e",
+    "-p",
     "timelapse_pause_time",
     type=float,
     default=.5,
     show_default=True,
     help="Set pause time between photos, in seconds")
 @click.option(
-    "--photos",
-    "-p",
-    "timelapse_photos",
+    "--frames",
+    "-f",
+    "timelapse_frames",
     type=int,
     default=10,
     show_default=True,
@@ -233,31 +234,50 @@ def camera_still_cmd(exposure, still_timeout, still_iso, still_do_raw, still_do_
     default=False,
     show_default=True,
     help="Flip image vertically")
+@click.option(
+    "--frame-start",
+    "-F",
+    "timelapse_frame_start",
+    type=int,
+    default=1,
+    show_default=True,
+    help="Set the frame number to use in file names")
 def camera_timelapse_cmd(
-        timelapse_photos,
+        timelapse_frames,
         timelapse_iso,
         timelapse_exposure_time,
         timelapse_pause_time,
         timelapse_do_raw,
         timelapse_do_hflip,
-        timelapse_do_vflip) -> None:
+        timelapse_do_vflip,
+        timelapse_frame_start) -> None:
     """Wrapper for libcamera-still timelapse photography"""
     timelapse_gain = int(min(max(timelapse_iso / 100, 1), 144))
-    timelapse_photos = int(max(timelapse_photos, 1))
+    timelapse_frames = int(max(timelapse_frames, 1))
+    timelapse_frame_start = int(max(timelapse_frame_start, 1))
     timelapse_pause_time_ms = int(1000 * max(0.0, timelapse_pause_time))
+    if timelapse_exposure_time.startswith("1/"):
+        timelapse_exposure_time_us = int(1.0/int(timelapse_exposure_time[2:]) * 1_000_000)
+    elif timelapse_exposure_time.endswith('"') or timelapse_exposure_time.endswith('s'):
+        timelapse_exposure_time_us = int(float(timelapse_exposure_time[:-1]) * 1_000_000)
+    else:
+        timelapse_exposure_time_us = int(1.0/int(timelapse_exposure_time) * 1_000_000)
+    timelapse_exposure_time = timelapse_exposure_time_us / 1000000.0
+    # timelapse_exposure_time = int(timelapse_exposure_time * 1000000)
     timelapse_timeout = \
-        ((10 + timelapse_photos * math.ceil(timelapse_exposure_time + timelapse_pause_time)) * 1000)
-    timelapse_exposure_time = int(timelapse_exposure_time * 1000000)
+        ((10 + timelapse_frames * math.ceil(timelapse_exposure_time + timelapse_pause_time)) * 1000)
 
     camera_cmd = [
         "libcamera-still",
         "--mode",
-        "4056:3040:12:P",
+        "8000:6000:10:P",
+        #"9152:6944:12:P",
+        #"4056:3040:12:P",
         "-n",
         "-t",
         f"{timelapse_timeout}",
         "--shutter",
-        f"{timelapse_exposure_time}",
+        f"{timelapse_exposure_time_us}",
         "--gain",
         f"{timelapse_gain}",
         "-o",
@@ -267,7 +287,7 @@ def camera_timelapse_cmd(
         "--vflip" if timelapse_do_vflip else "",
         "--hflip" if timelapse_do_hflip else "",
         "--framestart",
-        "1",
+        f"{timelapse_frame_start}",
         "-r" if timelapse_do_raw else "",
     ]
     click.echo(f"{camera_cmd=}")
