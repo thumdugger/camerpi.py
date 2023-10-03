@@ -8,20 +8,8 @@ import subprocess
 from pprint import pp
 
 @click.group("camerpi")
-@click.option(
-    "--list-cameras", "camerpi_cameras_list"
-    , help="Display list of available cameras"
-    , type=str, default="", show_default=False)
-@click.option(
-    "--list-modes", "camerpi_modes_list"
-    , help="Display list of modes for CAMERA[,CAMERA...] (indexes as from --list-cameras or 'ALL')"
-    , type=str, default="", show_default=False)
-@click.option(
-    "--list-resolutions", "camerpi_resolutions_list"
-    , help="Display list of resolutions for MODE[,MODE...]  (indexes as from --list-modes or 'ALL')"
-    , type=str, default="", show_default=False)
 @click.pass_context
-def camerpi_grp(ctx, camerpi_cameras_list, camerpi_modes_list, camerpi_resolutions_list):
+def camerpi_grp(ctx):
     """Wrapper for libcamera-* commands"""
     
     completed_process = subprocess.run(
@@ -81,62 +69,6 @@ def camerpi_grp(ctx, camerpi_cameras_list, camerpi_modes_list, camerpi_resolutio
                 , "crop-resolution": (int(ms.group(6)), int(ms.group(7)))}
     
     ctx.obj = { "cameras": cameras }
-    
-    if not (camerpi_cameras_list or camerpi_modes_list or camerpi_resolutions_list): 
-        return
-    
-    camerpi_cameras_list = [camera.upper() for camera in camerpi_cameras_list.split()]
-    show_all_cameras = "ALL" in camerpi_cameras_list
-    click.echo(f"{camerpi_cameras_list=}")
-
-    camerpi_modes_list = [mode.upper() for mode in camerpi_modes_list.split(",")]
-    show_all_modes = "ALL" in camerpi_modes_list
-    click.echo(f"{camerpi_modes_list=}")
-
-    camerpi_resolutions_list = [
-        resolution.upper() for resolution in camerpi_resolutions_list.split(",")]
-    show_all_resolutions = "ALL" in camerpi_resolutions_list
-    click.echo(f"{camerpi_resolutions_list=}")
-    
-    indents = "\t\t"
-    indent_depth = 0
-    for camera_index, camera in cameras.items():
-        indent_depth = 0
-        if show_all_cameras or camera_index in camerpi_cameras_list:
-            click.echo(camera_echo(camera))
-            indent_depth = 1
-            
-        if not (camerpi_modes_list or camerpi_resolutions_list):
-            continue
-
-        # we're here because user wanted a modes list and/or a resolutions list
-        if camerpi_modes_list:
-            modes = cameras[camera_index]["modes"]
-            for mode_index, mode in modes.items():
-                if show_all_modes or mode_index in camerpi_modes_list:
-                    click.echo(f"{indents[0:indent_depth]}{mode_echo(mode)}")
-
-                if not camerpi_resolutions_list:
-                    # user only wanted modes list
-                    continue
-                
-                # user wanted both the modes list and the resolutions list
-                indent_depth += 1
-                resolutions = cameras[camera_index]["modes"][mode_index]["resolutions"]
-                for resolution_index, resolution in resolutions.items():
-                    if show_all_resolutions or resolution_index in camerpi_resolutions_list:
-                        click.echo(f"{indents[0:indent_depth]}{resolution_echo(resolution)}")
-                indent_depth -= 1
-
-            # we already took care of this camera's modes list and any requested resolutions
-            # list so we can just move to the next camera
-            continue
-
-        # we're only here because user wanted a resolutions list but not a modes list
-        resolutions = cameras[camera_index]["modes"][mode_index]["resolutions"]
-        for resolution_index, resolution in resolutions.items():
-            if show_all_resolutions or resolution_index in camerpi_resolutions_list:
-                click.echo(f"{indents[0:indent_depth]}{resolution_echo(resolution)}")
 
 
 @camerpi_grp.group("list", chain=True)
