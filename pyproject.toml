@@ -24,8 +24,14 @@ classifiers=[
     'Programming Language :: Python :: 3.12',
 ]
 dependencies = [
-    "click",
-    "picamera2",
+    "click"
+    , "picamera2"
+    ,
+]
+
+optional_dependencies = [
+    "colorama"
+    ,
 ]
 
 [project.scripts]
