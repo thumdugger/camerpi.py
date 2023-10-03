@@ -13,11 +13,11 @@ from pprint import pp
     , help="Display list of available cameras"
     , type=str, default="", show_default=False)
 @click.option(
-    "--list-modes-for", "camerpi_modes_list"
+    "--list-modes", "camerpi_modes_list"
     , help="Display list of modes for CAMERA[,CAMERA...] (indexes as from --list-cameras or 'ALL')"
     , type=str, default="", show_default=False)
 @click.option(
-    "--list-resolutions-for", "camerpi_resolutions_list"
+    "--list-resolutions", "camerpi_resolutions_list"
     , help="Display list of resolutions for MODE[,MODE...]  (indexes as from --list-modes or 'ALL')"
     , type=str, default="", show_default=False)
 @click.pass_context
@@ -54,7 +54,7 @@ def camerpi_grp(ctx, camerpi_cameras_list, camerpi_modes_list, camerpi_resolutio
             camera_modes = camera["modes"] = {}
             continue
         
-        if ms := re.match(r"Modes: '(S([RGB]{4})(\d+)_(\w+))'", row):
+        if ms := re.match(r"Modes: '(S([RGB]{4})(\d+)_(\w+))' : ", row):
             # found start of modes list
             camera_mode_index += 1
             mode_index = f"M{camera_mode_index}"
@@ -65,9 +65,10 @@ def camerpi_grp(ctx, camerpi_cameras_list, camerpi_modes_list, camerpi_resolutio
                 , "bit-depth": int(ms.group(3))
                 , "packing": ms.group(4)}
             camera_mode_resolutions = camera_mode["resolutions"] = {}
+            row = row[len(ms.group(0)):]
         
         if ms := re.match(
-            r"(\d+)x(\d+) \[(\d+\.\d+) fps - \((\d+), (\d+)\)/(\d+)x(\d+) crop\]$"
+            r"(\d+)x(\d+) \[(\d+\.\d+) fps - \((\d+), (\d+)\)/(\d+)x(\d+) crop\]"
             , row
         ):  # found a resolution mode entry
             camera_mode_resolution_index += 1
@@ -138,10 +139,126 @@ def camerpi_grp(ctx, camerpi_cameras_list, camerpi_modes_list, camerpi_resolutio
                 click.echo(f"{indents[0:indent_depth]}{resolution_echo(resolution)}")
 
 
+@camerpi_grp.group("list", chain=True)
+def list_grp():
+    # we're just here for the grammar
+    pass
+
+
+@list_grp.command("cameras")
+@click.option(
+    "-C", "cameras_set"
+    , help="Specify camera to list information about (use a separate -c for each camera)."
+    , type=int, multiple=True
+)
+@click.option(
+    "--show-modes/--no-modes"
+    , help="Show all modes supported by specified cameras."
+    , is_flag=True, default=True, show_default=True
+)
+@click.option(
+    "--show-resolutions/--no-resolutions"
+    , help="Show all resolutions supported by specified cameras' modes."
+    , is_flag=True, default=True, show_default=True
+)
+@click.pass_obj
+def camerpi_list_cameras_cmd(obj, cameras_set, show_modes, show_resolutions):
+    """Display information about available cameras.
+    
+    If no camera is specified by a -C option then all available cameras are listed.
+    """
+    cameras = dict(obj['cameras'])
+    cameras_set = sorted(set({f"C{camera}" for camera in cameras_set} or cameras.keys()))
+    for camera_index in cameras_set:
+        try:
+            camera = cameras[camera_index]
+            click.echo(camera_echo(camera))
+            if show_modes:
+                modes = camera['modes'].values()
+                for mode in modes:
+                    click.echo(f"    {mode_echo(mode)}")
+                    if show_resolutions:
+                        resolutions = mode['resolutions'].values()
+                        for resolution in resolutions:
+                            click.echo(f"        {resolution_echo(resolution)}")
+        except KeyError:
+            click.echo(f"no camera '{camera_index}' found", err=True)
+            continue
+
+
+@list_grp.command("modes")
+@click.option(
+    "-M", "modes_set"
+    , help="Specify camera mode to list information about (use a separate -m for each mode)"
+    , type=int, multiple=True
+)
+@click.option(
+    "--show-resolutions/--no-resolutions"
+    , help="Show all resolutions supported by specified modes."
+    , is_flag=True, default=True, show_default=True
+)
+@click.pass_obj
+def camerpi_list_modes_cmd(obj, modes_set, show_resolutions):
+    """Display information about supported modes on available cameras.
+    
+    If no mode is specified by the -M option then all available modes supported by each 
+    camera are listed.
+    """
+    cameras = obj['cameras'].values()
+    modes = {}
+    for camera in cameras:
+        modes |= camera['modes']
+    mode_indexes = sorted(set({f"M{mode}" for mode in set(modes_set)} or modes.keys()))
+    for mode_index in mode_indexes:
+        try:
+            mode = modes[mode_index]
+            click.echo(f"{mode_echo(mode)}")
+            if show_resolutions:
+                resolutions = mode['resolutions'].values()
+                for resolution in resolutions:
+                    click.echo(f"    {resolution_echo(resolution)}")
+        except KeyError:
+            click.echo(f"no mode '{mode_index}' found", err=True)
+                
+
+@list_grp.command("resolutions")
+@click.option(
+    "-R", "resolutions_set"
+    , help="Specify resolution to list information about (use a separate -R for each resolution)"
+    , type=int, multiple=True
+)
+@click.pass_obj
+def camerpi_list_resolution_cmd(obj, resolutions_set):
+    """Display information about supported resolutions on available camera modes.
+    
+    If no resolution is specified by the -R option then all available resolutions
+    supported by each camera mode are listed.
+    """
+    cameras = obj['cameras'].values()
+    resolutions = {}
+    for camera in cameras:
+        for mode in camera['modes'].values():
+            resolutions |= mode['resolutions']
+    resolution_indexes = sorted(set({f"R{resolution}" for resolution in set(resolutions_set)} or resolutions.keys()))
+    for resolution_index in resolution_indexes:
+        try:
+            resolution = resolutions[resolution_index]
+            click.echo(f"{resolution_echo(resolution)}")
+        except KeyError:
+            click.echo(f"no resolution '{resolution_index}' found", err=True)
+
+
+@list_grp.command("config")
+@click.pass_obj
+def camerpi_list_config_cmd(cameras):
+    pass
+
+
 def camera_echo(camera: dict) -> str:
     echo = f"{camera.get('camera-index', 'C?')}: "
     echo += f"{{dtoverlay: {camera.get('dtoverlay', '??')}, "
-    echo += f"sensor-resolution: {camera.get('sensor-resolution', '(?xres?, ?yres?')}, "
+    (xres, yres) = camera.get('sensor-resolution', ('?xres?', '?yres?'))
+    echo += f"sensor-resolution: {xres}x{yres}, "
     echo += f"device: {camera.get('device', '??')}}}"
     return echo
 
@@ -159,9 +276,10 @@ def resolution_echo(resolution: dict) -> str:
     echo = f"{resolution.get('resolution-index', 'R?')}: "
     (xres, yres) = resolution.get('resolution', ('?xres?', '?yres?'))
     echo += f"{xres}x{yres} "
-    echo += f"{{fps: {resolution.get('fps', '??')}, "
+    echo += f"{{fps: {resolution.get('fps', '??'):.2f}, "
     echo += f"crop-position: {resolution.get('crop-position', '??')}, "
-    echo += f"crop-resolution: {resolution.get('crop-resolution', '??')}}}"
+    (xres, yres) = resolution.get('crop-resolution', ('?xres?', '?yres?'))
+    echo += f"crop-resolution: {xres}x{yres}}}"
     return echo
 
 
