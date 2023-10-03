@@ -426,4 +426,4 @@ def run_subprocess(cmd):
 
 
 if __name__ == "__main__":
-    camerpi()
+    camerpi_grp()
