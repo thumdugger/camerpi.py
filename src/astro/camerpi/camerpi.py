@@ -62,7 +62,7 @@ def camerpi_grp(ctx):
             camera_mode_resolution_index += 1
             resolution_index = f"R{camera_mode_resolution_index}"
             camera_mode_resolutions[resolution_index] = {
-                "resolution-index": resolution_index
+                "key": resolution_index
                 , "resolution": (int(ms.group(1)), int(ms.group(2)))
                 , "fps": float(ms.group(3))
                 , "crop-position": (int(ms.group(4)), int(ms.group(5)))
@@ -71,40 +71,52 @@ def camerpi_grp(ctx):
     ctx.obj = { "cameras": cameras }
 
 
-@camerpi_grp.group("list", chain=True)
+@camerpi_grp.group("list", invoke_without_command=True)
 @click.option(
-    "--cameras", "-c", "show_cameras"
+    "--show_cameras", "-c", "show_cameras"
     , help="Show all available cameras."
     , is_flag=True, default=True, show_default=False)
 @click.option(
-    "--modes", "-m", "show_modes"
+    "--show_modes", "-m", "show_modes"
     , help="Show all modes supported by available cameras."
     , is_flag=True, default=True, show_default=False)
 @click.option(
-    "--resolutions", "-r", "show_resolutions"
+    "--show_resolutions", "-r", "show_resolutions"
     , help="Show all modes supported by available cameras."
     , is_flag=True, default=True, show_default=False
 )
 @click.pass_context
-def list_grp(ctx, show_cameras, show_modes, show_resolutions):
-    # TODO add traffic cop code to determine what to list so 'camerpi list' will just
-    #      show everything but other commands can call here to to show requested info.
-    pass
+def camerpi_list_grp(ctx: click.Context, show_cameras, show_modes, show_resolutions):
+    click.echo(f"{ctx.invoked_subcommand=}")
+    click.echo(f"{ctx.parent.info_name=}")
+    click.echo(f"{ctx.args=}")
+    if ctx.invoked_subcommand is None:
+        if show_cameras:
+            ctx.invoke(
+                camerpi_list_cameras_cmd
+                , show_modes=show_modes
+                , show_resolutions=show_resolutions)
+        elif show_modes:
+            ctx.invoke(camerpi_list_modes_cmd, show_resolutions=show_resolutions)
+        elif show_resolutions:
+            ctx.invoke(camerpi_list_resolutions_cmd)
+        else:
+            click.echo(ctx.get_help())
 
 
-@list_grp.command("cameras")
+@camerpi_list_grp.command("cameras")
 @click.option(
     "-C", "cameras_set"
     , help="Specify camera to list information about (use a separate -C for each camera)."
     , type=int, multiple=True
 )
 @click.option(
-    "--modes", "-m", "show_modes"
+    "--show_modes", "-m"
     , help="Show all modes supported by specified cameras."
     , is_flag=True, default=True, show_default=True
 )
 @click.option(
-    "--resolutions", "-r", "show_resolutions"
+    "--show_resolutions", "-r"
     , help="Show all resolutions supported by specified cameras' modes."
     , is_flag=True, default=True, show_default=True
 )
@@ -133,14 +145,14 @@ def camerpi_list_cameras_cmd(obj, cameras_set, show_modes, show_resolutions):
             continue
 
 
-@list_grp.command("modes")
+@camerpi_list_grp.command("modes")
 @click.option(
     "-M", "modes_set"
     , help="Specify camera mode to list information about (use separate -M for each mode)"
     , type=int, multiple=True
 )
 @click.option(
-    "--resolutions", "-r", "show_resolutions"
+    "--show-resolutions", "-r"
     , help="Show all resolutions supported by specified modes."
     , is_flag=True, default=True, show_default=True
 )
@@ -168,14 +180,14 @@ def camerpi_list_modes_cmd(obj, modes_set, show_resolutions):
             click.echo(f"no mode '{mode_index}' found", err=True)
                 
 
-@list_grp.command("resolutions")
+@camerpi_list_grp.command("resolutions")
 @click.option(
     "-R", "resolutions_set"
     , help="Specify resolution to list information about (use a separate -R for each resolution)"
     , type=int, multiple=True
 )
 @click.pass_obj
-def camerpi_list_resolution_cmd(obj, resolutions_set):
+def camerpi_list_resolutions_cmd(obj, resolutions_set):
     """Display information about supported resolutions on available camera modes.
     
     If no resolution is specified by the -R option then all available resolutions
@@ -195,7 +207,7 @@ def camerpi_list_resolution_cmd(obj, resolutions_set):
             click.echo(f"no resolution '{resolution_index}' found", err=True)
 
 
-@list_grp.command("config")
+@camerpi_list_grp.command("config")
 @click.pass_obj
 def camerpi_list_config_cmd(cameras):
     pass
@@ -220,7 +232,7 @@ def mode_echo(mode: dict) -> str:
 
 
 def resolution_echo(resolution: dict) -> str:
-    echo = f"{resolution.get('resolution-index', 'R?')}: "
+    echo = f"{resolution.get('key', 'R?')}: "
     (xres, yres) = resolution.get('resolution', ('?xres?', '?yres?'))
     echo += f"{xres}x{yres} "
     echo += f"{{fps: {resolution.get('fps', '??'):.2f}, "
@@ -235,32 +247,17 @@ def resolution_echo(resolution: dict) -> str:
     "focus_time"
     , type=int, default=60, required=False)
 @click.option(
-    "-C", "focus_camera_index"
-    , help="Set camera to use (as from 'list cameras')"
+    "-C", "camera_index"
+    , help="Set camera to use (as from '--show-cameras')"
     , type=int, default=0, show_default=False)
 @click.option(
-    "-M", "focus_mode_index"
-    , help="Set camera mode to use (as from 'list modes')"
+    "-M", "mode_index"
+    , help="Set camera mode to use (as from '--show-modes')"
     , type=int, default=0, show_default=False)
 @click.option(
-    "-R", "focus_resolution_index"
-    , help="Set camera mode resolution to use (as from 'list resolutions')"
+    "-R", "resolution_index"
+    , help="Set camera mode resolution to use (as from '--show-resolutions')"
     , type=int, default=0, show_default=False)
-@click.option(
-    "--cameras", "-c", "show_cameras"
-    , help="Show all cameras available."
-    , is_flag=True, default=True, show_default=True
-)
-@click.option(
-    "--modes", "-m", "show_modes"
-    , help="Show all modes supported by all available cameras."
-    , is_flag=True, default=True, show_default=True
-)
-@click.option(
-    "--resolutions", "-r", "show_resolutions"
-    , help="Show all resolutions supported by all available camera modes."
-    , is_flag=True, default=True, show_default=True
-)
 @click.option(
     "--iso", "-i", "focus_iso"
     , help="Set iso ('gain')"
@@ -273,30 +270,62 @@ def resolution_echo(resolution: dict) -> str:
     "--vflip", "still_vflip"
     , help="Flip image vertically"
     , is_flag=True, default=True, show_default=False)
+@click.option(
+    "--cameras", "-c", "show_cameras"
+    , help="Show all cameras available."
+    , is_flag=True, default=False)
+@click.option(
+    "--modes", "-m", "show_modes"
+    , help="Show all modes supported by all available cameras."
+    , is_flag=True, default=False)
+@click.option(
+    "--resolutions", "-r", "show_resolutions"
+    , help="Show all resolutions supported by all available camera modes."
+    , is_flag=True, default=False)
 @click.pass_obj
 def camera_focus_cmd(
         obj
         , focus_time 
-        , focus_camera_index
-        , focus_mode_index
-        , focus_resolution_index
+        , camera_index
+        , mode_index
+        , resolution_index
         , focus_iso
         , still_hflip
         , still_vflip
-    ) -> None:
+        , show_cameras
+        , show_modes
+        , show_resolutions) -> None:
     """Opens a preview window to allow for camera focusing."""
 
-    if not (focus_camera := obj["cameras"].get(focus_camera_index, {})):
-        raise RuntimeError(f"no camera found with --camera-index: {focus_camera_index}")
+    if show_cameras or show_modes or show_resolutions:
+        click.get_current_context().invoke(
+            camerpi_list_grp
+            , show_cameras=show_cameras
+            , show_modes=show_modes
+            , show_resolutions=show_resolutions)
+    # elif show_modes:
+    #     click.get_current_context().invoke(
+    #         camerpi_list_modes_cmd
+    #         , show_resolutions=show_resolutions)
+    # elif show_resolutions:
+    #     click.get_current_context().invoke(camerpi_list_resolutions_cmd)
+    
+    # convert indexes to keys
+    camera_key = f"C{camera_index}"
+    mode_key = f"M{mode_index}"
+    resolution_key = f"R{resolution_index}"
+    
+    if not (focus_camera := obj["cameras"].get(camera_key, {})):
+        raise RuntimeError(f"camera -{camera_key} not found")
     # click.echo(f"{focus_camera=}")
 
-    if not (focus_mode := focus_camera["modes"].get(focus_mode_index, {})):
-        raise RuntimeError(f"no camera mode found with --mode-index: {focus_mode_index}")
+    if not (focus_mode := focus_camera["modes"].get(mode_key, {})):
+        raise RuntimeError(f"mode -{mode_key} not found")
     # click.echo(f"{focus_mode=}")
 
-    if not (focus_resolution := focus_mode["resolutions"].get(focus_resolution_index, {})):
+    if not (focus_resolution := focus_mode["resolutions"].get(resolution_key, {})):
         raise RuntimeError(
-            f"no camera mode resolution found with --resolution-index: {focus_resolution_index}")
+            f"resolution -{resolution_key} not found")
     # click.echo(f"{focus_resolution=}")
 
     (focus_width, focus_height) = focus_resolution['resolution']
