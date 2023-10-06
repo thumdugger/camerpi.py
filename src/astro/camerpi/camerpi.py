@@ -23,8 +23,7 @@ def camerpi_grp(ctx):
 
     ctx.obj = {
         'cameras': cameras
-        , 'config': config
-    }
+        , 'config': config }
 
 
 def _init_cameras() -> dict:
@@ -137,19 +136,17 @@ def camerpi_list_grp(ctx: click.Context, show_cameras, show_modes, show_resoluti
 @camerpi_list_grp.command("cameras")
 @click.option(
     "-C", "cameras_set"
-    , help="Specify camera to list information about (use a separate -C for each camera)."
-    , type=int, multiple=True
-)
+    , help="Specify camera to list information about (use a separate -C for"
+        " each camera)."
+    , type=int, multiple=True)
 @click.option(
     "--show_modes", "-m"
     , help="Show all modes supported by specified cameras."
-    , is_flag=True, default=True, show_default=True
-)
+    , is_flag=True, default=True, show_default=True)
 @click.option(
     "--show_resolutions", "-r"
     , help="Show all resolutions supported by specified cameras' modes."
-    , is_flag=True, default=True, show_default=True
-)
+    , is_flag=True, default=True, show_default=True)
 @click.pass_obj
 def camerpi_list_cameras_cmd(obj, cameras_set, show_modes, show_resolutions):
     """Display information about available cameras.
@@ -178,20 +175,19 @@ def camerpi_list_cameras_cmd(obj, cameras_set, show_modes, show_resolutions):
 @camerpi_list_grp.command("modes")
 @click.option(
     "-M", "modes_set"
-    , help="Specify camera mode to list information about (use separate -M for each mode)"
-    , type=int, multiple=True
-)
+    , help="Specify camera mode to list information about (use separate -M for"
+        " each mode)"
+    , type=int, multiple=True)
 @click.option(
     "--show-resolutions", "-r"
     , help="Show all resolutions supported by specified modes."
-    , is_flag=True, default=True, show_default=True
-)
+    , is_flag=True, default=True, show_default=True)
 @click.pass_obj
 def camerpi_list_modes_cmd(obj, modes_set, show_resolutions):
     """Display information about supported modes on available cameras.
     
-    If no mode is specified by the -M option then all available modes supported by each 
-    camera are listed.
+    If no mode is specified by the -M option then all available modes supported
+    by each camera are listed.
     """
     cameras = obj['cameras'].values()
     modes = {}
@@ -213,9 +209,9 @@ def camerpi_list_modes_cmd(obj, modes_set, show_resolutions):
 @camerpi_list_grp.command("resolutions")
 @click.option(
     "-R", "resolutions_set"
-    , help="Specify resolution to list information about (use a separate -R for each resolution)"
-    , type=int, multiple=True
-)
+    , help="Specify resolution to list information about (use a separate -R for"
+        " each resolution)"
+    , type=int, multiple=True)
 @click.pass_obj
 def camerpi_list_resolutions_cmd(obj, resolutions_set):
     """Display information about supported resolutions on available camera modes.
@@ -278,13 +274,14 @@ def resolution_echo(resolution: dict) -> str:
     , type=int, default=60, required=False)
 @click.option(
     "--zoom", "-z", "focus_zoom"
-    , help="Set grid location of zoom: TL, TC, TR, ML, C, MR, BL, BC, BR (can be repeated)"
+    , help="Set grid location of zoom: TL, TC, TR, ML, C, MR, BL, BC, BR"
+        " (can be repeated)"
     , type=str, multiple=True)
 @click.option(
     "--heading", "focus_heading"
-    , help="Sets focus heading in the indicated direction on the sensor. No heading implies a"
-           " focus window centered in the middle of the sensor area and treating all '--by'"
-           " requests as, '--by=0'."
+    , help="Sets focus heading in the indicated direction on the sensor."
+        " No heading implies a" " focus window centered in the middle of the"
+        " sensor area and treating all '--by' requests as, '--by=0'."
     , type=click.Choice([
         'NW', 'NNW', 'N', 'NNE', 'NE'
         , 'ENE', 'E', 'ESE'
@@ -292,7 +289,16 @@ def resolution_echo(resolution: dict) -> str:
         , 'WSW', 'W', 'WNW']))
 @click.option(
     "--scale", "-s", "focus_scale"
-    , help="Sets the fractional width and height of the focus window as compared to the sensor. SCALE must be 1 or of form, CELLS/PARTITIONS, where CELLS<= PARTITIONS and CELLS >= 1. PARTITIONS is the number of equal length sections to break the sensors width and height into and CELLS is the number of these partitions, wide and tall, the viewfinder window will always be, at most, the safe  dimensions (width and height), as compared to the screen, and at least 1/4 of those  safe dimensions. A value of 1, or where CELLS = PARTITIONS, implies using the largest,  safe, viewfinder window size possible as compared to the screen resolution."
+    , help="Sets the fractional width and height of the focus window as"
+        " compared to the sensor. SCALE must be 1 or of form, CELLS/PARTITIONS,"
+        " where CELLS<= PARTITIONS and CELLS >= 1. PARTITIONS is the number of"
+        " equal length sections to break the sensors width and height into and"
+        " CELLS is the number of these partitions, wide and tall, the viewfinder"
+        " window will always be, at most, the safe dimensions (width and height),"
+        " as compared to the screen, and at least 1/4 of those safe dimensions. A"
+        " value o f 1, or where CELLS = PARTITIONS, implies using the largest,"
+        " safe, view finder window size possible as compared to the screen"
+        " resolution."
     , type=str, default=1, show_default=True)
 @click.option(
     "-C", "camera_index"
