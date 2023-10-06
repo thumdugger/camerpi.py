@@ -273,22 +273,20 @@ def resolution_echo(resolution: dict) -> str:
     "focus_time"
     , type=int, default=60, required=False)
 @click.option(
-    "--zoom", "-z", "focus_zoom"
-    , help="Set grid location of zoom: TL, TC, TR, ML, C, MR, BL, BC, BR"
-        " (can be repeated)"
-    , type=str, multiple=True)
+    "--viewfinder-top-left", "viewfinder_top_left"
+    , help="Set percent distance to move focus window in one of the heading"
+        " directions."
+    , type=int, default=100, show_default=True)
 @click.option(
-    "--heading", "focus_heading"
+    "--viewfinder-heading", "viewfinder_heading"
     , help="Sets focus heading in the indicated direction on the sensor."
         " No heading implies a" " focus window centered in the middle of the"
-        " sensor area and treating all '--by' requests as, '--by=0'."
+        " sensor area and treating all '--by' requests as '--by=0'."
     , type=click.Choice([
-        'NW', 'NNW', 'N', 'NNE', 'NE'
-        , 'ENE', 'E', 'ESE'
-        , 'SE', 'SSE', 'S', 'SSW', 'SW'
-        , 'WSW', 'W', 'WNW']))
+        'NW', 'NNW', 'N', 'NNE', 'NE', 'ENE', 'E', 'ESE'
+        , 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW']))
 @click.option(
-    "--scale", "-s", "focus_scale"
+    "--viewfinder-scale", "viewfinder_scale"
     , help="Sets the fractional width and height of the focus window as"
         " compared to the sensor. SCALE must be 1 or of form, CELLS/PARTITIONS,"
         " where CELLS<= PARTITIONS and CELLS >= 1. PARTITIONS is the number of"
@@ -340,7 +338,9 @@ def resolution_echo(resolution: dict) -> str:
 def camera_focus_cmd(
         obj
         , focus_time
-        , focus_zoom 
+        , viewfinder_top_left
+        , viewfinder_heading
+        , viewfinder_scale
         , camera_index
         , mode_index
         , resolution_index
