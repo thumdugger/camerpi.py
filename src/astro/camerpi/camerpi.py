@@ -4,6 +4,8 @@ import click
 import math
 import re
 import subprocess
+import sys
+import tkinter as tk
 
 from pprint import pp
 
@@ -12,12 +14,26 @@ from pprint import pp
 def camerpi_grp(ctx):
     """Wrapper for libcamera-* commands"""
     
-    completed_process = subprocess.run(
-        ["libcamera-still", "--list-cameras"]
-        , capture_output=True)
+    config = _init_config()
+    cameras = _init_cameras()
+
+    config['default-camera'] = 'C0'
+    config['default-mode'] = 'M0'
+    config['default-resolution'] = list(cameras['C0']['modes']['M0']['resolutions'].values())[-1]['key']        
+
+    ctx.obj = {
+        'cameras': cameras
+        , 'config': config
+    }
+
+
+def _init_cameras() -> dict:
+    """Builds available cameras, modes, and resolutions list."""
+
+    completed_process = subprocess.run(["libcamera-still", "--list-cameras"], capture_output=True)
     if 0 != completed_process.returncode:
         raise RuntimeError(
-            f"libcamera-still failed with error code:" 
+            f"libcamera-still failed with error code while retreiving list of cameras:" 
             f"{completed_process.returncode} : "
             f"{completed_process.stderr.decode(encoding='utf-8', errors='strict')}")
     
@@ -33,9 +49,9 @@ def camerpi_grp(ctx):
 
         if ms := re.match(r"(\d{1,2}) : (\w+) \[(\d+)x(\d+)\] \(([^\)]+)\)$", row):
             # found a new camera device listing
-            camera_index = f"C{ms.group(1)}"
-            camera = cameras[camera_index] = {
-                "camera-index": camera_index
+            camera_key = f"C{ms.group(1)}"
+            camera = cameras[camera_key] = {
+                "key": camera_key
                 , "dtoverlay": ms.group(2)
                 , "sensor-resolution": (int(ms.group(3)), int(ms.group(4)))
                 , "device": ms.group(5)}
@@ -45,9 +61,9 @@ def camerpi_grp(ctx):
         if ms := re.match(r"Modes: '(S([RGB]{4})(\d+)_(\w+))' : ", row):
             # found start of modes list
             camera_mode_index += 1
-            mode_index = f"M{camera_mode_index}"
-            camera_mode = camera_modes[mode_index] = {
-                "mode-index": mode_index
+            mode_key = f"M{camera_mode_index}"
+            camera_mode = camera_modes[mode_key] = {
+                "key": mode_key
                 , "mode": ms.group(1)
                 , "bayer-order": ms.group(2)
                 , "bit-depth": int(ms.group(3))
@@ -60,15 +76,33 @@ def camerpi_grp(ctx):
             , row
         ):  # found a resolution mode entry
             camera_mode_resolution_index += 1
-            resolution_index = f"R{camera_mode_resolution_index}"
-            camera_mode_resolutions[resolution_index] = {
-                "key": resolution_index
+            resolution_key = f"R{camera_mode_resolution_index}"
+            camera_mode_resolutions[resolution_key] = {
+                "key": resolution_key
                 , "resolution": (int(ms.group(1)), int(ms.group(2)))
                 , "fps": float(ms.group(3))
                 , "crop-position": (int(ms.group(4)), int(ms.group(5)))
                 , "crop-resolution": (int(ms.group(6)), int(ms.group(7)))}
-    
-    ctx.obj = { "cameras": cameras }
+    return cameras
+
+
+def _init_config() -> dict:
+    """Builds configuration dictionary"""
+
+    # TODO integrate this into the config command
+    config = {}
+    root = tk.Tk()
+    root.withdraw()
+    (width, height, scaling_factor) = (
+        root.winfo_screenwidth(), 
+        root.winfo_screenheight(),
+        # dpi * safe_window_proportion(=96%) * std_dpi(=96)
+        root.winfo_fpixels('1i') * .01)  
+    config['preview_max_width'] = int(width * scaling_factor)
+    config['preview_max_height'] = int(height * scaling_factor)
+    config['preview_min_width'] = config['preview_max_width'] // 4 
+    config['preview_min_height'] = config['preview_max_height'] // 4
+    return config
 
 
 @camerpi_grp.group("list", invoke_without_command=True)
@@ -83,13 +117,9 @@ def camerpi_grp(ctx):
 @click.option(
     "--show_resolutions", "-r", "show_resolutions"
     , help="Show all modes supported by available cameras."
-    , is_flag=True, default=True, show_default=False
-)
+    , is_flag=True, default=True, show_default=False)
 @click.pass_context
 def camerpi_list_grp(ctx: click.Context, show_cameras, show_modes, show_resolutions):
-    click.echo(f"{ctx.invoked_subcommand=}")
-    click.echo(f"{ctx.parent.info_name=}")
-    click.echo(f"{ctx.args=}")
     if ctx.invoked_subcommand is None:
         if show_cameras:
             ctx.invoke(
@@ -126,11 +156,11 @@ def camerpi_list_cameras_cmd(obj, cameras_set, show_modes, show_resolutions):
     
     If no camera is specified by a -C option then all available cameras are listed.
     """
-    cameras = dict(obj['cameras'])
+    cameras = obj['cameras']
     cameras_set = sorted(set({f"C{camera}" for camera in cameras_set} or cameras.keys()))
-    for camera_index in cameras_set:
+    for camera_key in cameras_set:
         try:
-            camera = cameras[camera_index]
+            camera = cameras[camera_key]
             click.echo(camera_echo(camera))
             if show_modes:
                 modes = camera['modes'].values()
@@ -141,7 +171,7 @@ def camerpi_list_cameras_cmd(obj, cameras_set, show_modes, show_resolutions):
                         for resolution in resolutions:
                             click.echo(f"        {resolution_echo(resolution)}")
         except KeyError:
-            click.echo(f"no camera '{camera_index}' found", err=True)
+            click.echo(f"no camera '{camera_key}' found", err=True)
             continue
 
 
@@ -214,7 +244,7 @@ def camerpi_list_config_cmd(cameras):
 
 
 def camera_echo(camera: dict) -> str:
-    echo = f"{camera.get('camera-index', 'C?')}: "
+    echo = f"{camera.get('key', 'C?')}: "
     echo += f"{{dtoverlay: {camera.get('dtoverlay', '??')}, "
     (xres, yres) = camera.get('sensor-resolution', ('?xres?', '?yres?'))
     echo += f"sensor-resolution: {xres}x{yres}, "
@@ -223,7 +253,7 @@ def camera_echo(camera: dict) -> str:
 
 
 def mode_echo(mode: dict) -> str:
-    echo = f"{mode.get('mode-index', 'M?')}: "
+    echo = f"{mode.get('key', 'M?')}: "
     echo += f"{mode.get('mode', '?mode?')} "
     echo += f"{{bayer-order: {mode.get('bayer-order', '??')}, "
     echo += f"bit-depth: {mode.get('bit-depth', '??')}, "
@@ -247,17 +277,35 @@ def resolution_echo(resolution: dict) -> str:
     "focus_time"
     , type=int, default=60, required=False)
 @click.option(
+    "--zoom", "-z", "focus_zoom"
+    , help="Set grid location of zoom: TL, TC, TR, ML, C, MR, BL, BC, BR (can be repeated)"
+    , type=str, multiple=True)
+@click.option(
+    "--heading", "focus_heading"
+    , help="Sets focus heading in the indicated direction on the sensor. No heading implies a"
+           " focus window centered in the middle of the sensor area and treating all '--by'"
+           " requests as, '--by=0'."
+    , type=click.Choice([
+        'NW', 'NNW', 'N', 'NNE', 'NE'
+        , 'ENE', 'E', 'ESE'
+        , 'SE', 'SSE', 'S', 'SSW', 'SW'
+        , 'WSW', 'W', 'WNW']))
+@click.option(
+    "--scale", "-s", "focus_scale"
+    , help="Sets the fractional width and height of the focus window as compared to the sensor. SCALE must be 1 or of form, CELLS/PARTITIONS, where CELLS<= PARTITIONS and CELLS >= 1. PARTITIONS is the number of equal length sections to break the sensors width and height into and CELLS is the number of these partitions, wide and tall, the viewfinder window will always be, at most, the safe  dimensions (width and height), as compared to the screen, and at least 1/4 of those  safe dimensions. A value of 1, or where CELLS = PARTITIONS, implies using the largest,  safe, viewfinder window size possible as compared to the screen resolution."
+    , type=str, default=1, show_default=True)
+@click.option(
     "-C", "camera_index"
     , help="Set camera to use (as from '--show-cameras')"
-    , type=int, default=0, show_default=False)
+    , type=int, default=None, show_default=False)
 @click.option(
     "-M", "mode_index"
     , help="Set camera mode to use (as from '--show-modes')"
-    , type=int, default=0, show_default=False)
+    , type=int, default=None, show_default=False)
 @click.option(
     "-R", "resolution_index"
     , help="Set camera mode resolution to use (as from '--show-resolutions')"
-    , type=int, default=0, show_default=False)
+    , type=int, default=None, show_default=False)
 @click.option(
     "--iso", "-i", "focus_iso"
     , help="Set iso ('gain')"
@@ -285,7 +333,8 @@ def resolution_echo(resolution: dict) -> str:
 @click.pass_obj
 def camera_focus_cmd(
         obj
-        , focus_time 
+        , focus_time
+        , focus_zoom 
         , camera_index
         , mode_index
         , resolution_index
@@ -303,47 +352,83 @@ def camera_focus_cmd(
             , show_cameras=show_cameras
             , show_modes=show_modes
             , show_resolutions=show_resolutions)
-    # elif show_modes:
-    #     click.get_current_context().invoke(
-    #         camerpi_list_modes_cmd
-    #         , show_resolutions=show_resolutions)
-    # elif show_resolutions:
-    #     click.get_current_context().invoke(camerpi_list_resolutions_cmd)
+        click.echo()
     
+    config = obj['config']
+ 
     # convert indexes to keys
-    camera_key = f"C{camera_index}"
-    mode_key = f"M{mode_index}"
-    resolution_key = f"R{resolution_index}"
-    
-    if not (focus_camera := obj["cameras"].get(camera_key, {})):
+    camera_key = f"C{camera_index}" if camera_index else config['default-camera']
+    if not (focus_camera := obj['cameras'].get(camera_key, {})):
         raise RuntimeError(f"camera -{camera_key} not found")
-    # click.echo(f"{focus_camera=}")
-
-    if not (focus_mode := focus_camera["modes"].get(mode_key, {})):
-        raise RuntimeError(f"mode -{mode_key} not found")
-    # click.echo(f"{focus_mode=}")
-
+    
+    mode_key = f"M{mode_index}" if mode_index else config['default-mode']
+    if not (focus_mode := focus_camera['modes'].get(mode_key, {})):
+        raise RuntimeError(f"mode -{mode_key} not found")    
+    
+    resolution_key = f"R{resolution_index}" if resolution_index else config['default-resolution']
     if not (focus_resolution := focus_mode["resolutions"].get(resolution_key, {})):
-        raise RuntimeError(
-            f"resolution -{resolution_key} not found")
-    # click.echo(f"{focus_resolution=}")
-
+        raise RuntimeError(f"resolution -{resolution_key} not found")
+    
     (focus_width, focus_height) = focus_resolution['resolution']
     focus_bit_depth = focus_mode['bit-depth']
     focus_packing = "P" if focus_mode['packing'].endswith("P") else "U"
-    focus_framerate = focus_resolution['fps']
+    
+    (roi_xpos, roi_ypos, roi_width, roi_height) = (0.0, 0.0, 1.0, 1.0)
+    zoom_level = 0
+    zoom_factor = 1.0
+    magnification_factor = 1
+    
+    for zoom in focus_zoom:
+        zoom_level += 1
+        zoom_factor = 1.0 / math.pow(3, zoom_level)
+
+        grid_row = zoom[0].upper()
+        if 'C' == grid_row:
+            roi_ypos += zoom_factor
+        elif 'B' == grid_row:
+            roi_ypos += 2.0 * zoom_factor
+            
+        grid_col = zoom[-1].upper()
+        if 'C' == grid_col:
+            roi_xpos += zoom_factor
+        elif 'R' == grid_col:
+            roi_ypos += 2 * zoom_factor
+        
+        if zoom_level > 2:
+            magnification_factor += 1
+
+    roi_width = zoom_factor
+    roi_height = zoom_factor
+    viewfinder_width = int(focus_width * zoom_factor * magnification_factor)
+    viewfinder_height = int(focus_height * zoom_factor * magnification_factor)
+    preview_xpos = (1920 - viewfinder_width) // 2
+    preview_ypos = (1080 - viewfinder_height) // 2
+
+    click.echo(f"{preview_xpos=}")
+    click.echo(f"{preview_ypos=}")
+    click.echo(f"{viewfinder_width=}")
+    click.echo(f"{viewfinder_height=}")
+    sys.exit()
 
     focus_libcamera_mode = f"{focus_width}:{focus_height}:{focus_bit_depth}:{focus_packing}"
     focus_gain = int(min(max(int(focus_iso) / 100, 1), 144))
     focus_time_ms = int(focus_time) * 1000
     focus_cmd = [
         "libcamera-still"
-        , "--mode", f"{focus_libcamera_mode}"
-        , "-t", f"{focus_time_ms}"
-        , "--gain", f"{focus_gain}"
-        , "--framerate", f"{focus_framerate}"
+        , "--mode"
+        , f"{focus_libcamera_mode}"
         , "--hflip" if still_hflip else ""
         , "--vflip" if still_vflip else ""
+        , "--roi"
+        , f"{roi_xpos},{roi_ypos},{roi_width},{roi_height}"
+        , "--viewfinder-width"
+        , f"{viewfinder_width}" 
+        , "--viewfinder-height"
+        , f"{viewfinder_height}"
+        , "-p"
+        , f"{(1920-viewfinder_width)//2},{(1080-viewfinder_height)//2},{viewfinder_width},{viewfinder_height}"
+        , "--gain", f"{focus_gain}"
+        , "-t", f"{focus_time_ms}"
     ]
     click.echo(f"{focus_cmd=}")
     click.echo(f"running as: {' '.join(focus_cmd)}")
