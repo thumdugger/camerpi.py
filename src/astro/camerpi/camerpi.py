@@ -29,7 +29,9 @@ def camerpi_grp(ctx):
 def _init_cameras() -> dict:
     """Builds available cameras, modes, and resolutions list."""
 
-    completed_process = subprocess.run(["libcamera-still", "--list-cameras"], capture_output=True)
+    completed_process = subprocess.run(
+        ["libcamera-still", "--list-cameras"], 
+        capture_output=True)
     if 0 != completed_process.returncode:
         raise RuntimeError(
             f"libcamera-still failed with error code while retreiving list of cameras:" 
@@ -273,7 +275,7 @@ def resolution_echo(resolution: dict) -> str:
     "focus_time"
     , type=int, default=60, required=False)
 @click.option(
-    "--viewfinder-top-left", "viewfinder_top_left"
+    "--viewfinder-pos", "-p", "viewfinder_pos"
     , help="Set percent distance to move focus window in one of the heading"
         " directions."
     , type=int, default=100, show_default=True)
@@ -286,7 +288,7 @@ def resolution_echo(resolution: dict) -> str:
         'NW', 'NNW', 'N', 'NNE', 'NE', 'ENE', 'E', 'ESE'
         , 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW']))
 @click.option(
-    "--viewfinder-scale", "viewfinder_scale"
+    "--viewfinder-scale", "-s", "viewfinder_scale"
     , help="Sets the fractional width and height of the focus window as"
         " compared to the sensor. SCALE must be 1 or of form, CELLS/PARTITIONS,"
         " where CELLS<= PARTITIONS and CELLS >= 1. PARTITIONS is the number of"
@@ -317,11 +319,11 @@ def resolution_echo(resolution: dict) -> str:
 @click.option(
     "--hflip", "still_hflip"
     , help="Flip image horizontally"
-    , is_flag=True, default=True, show_default=False)
+    , is_flag=True, default=False, show_default=False)
 @click.option(
     "--vflip", "still_vflip"
     , help="Flip image vertically"
-    , is_flag=True, default=True, show_default=False)
+    , is_flag=True, default=False, show_default=False)
 @click.option(
     "--cameras", "-c", "show_cameras"
     , help="Show all cameras available."
@@ -384,37 +386,37 @@ def camera_focus_cmd(
     zoom_factor = 1.0
     magnification_factor = 1
     
-    for zoom in focus_zoom:
-        zoom_level += 1
-        zoom_factor = 1.0 / math.pow(3, zoom_level)
+    # for zoom in focus_zoom:
+    #     zoom_level += 1
+    #     zoom_factor = 1.0 / math.pow(3, zoom_level)
 
-        grid_row = zoom[0].upper()
-        if 'C' == grid_row:
-            roi_ypos += zoom_factor
-        elif 'B' == grid_row:
-            roi_ypos += 2.0 * zoom_factor
-            
-        grid_col = zoom[-1].upper()
-        if 'C' == grid_col:
-            roi_xpos += zoom_factor
-        elif 'R' == grid_col:
-            roi_ypos += 2 * zoom_factor
-        
-        if zoom_level > 2:
-            magnification_factor += 1
+    #     grid_row = zoom[0].upper()
+    #     if 'C' == grid_row:
+    #         roi_ypos += zoom_factor
+    #     elif 'B' == grid_row:
+    #         roi_ypos += 2.0 * zoom_factor
+    #         
+    #     grid_col = zoom[-1].upper()
+    #     if 'C' == grid_col:
+    #         roi_xpos += zoom_factor
+    #     elif 'R' == grid_col:
+    #         roi_ypos += 2 * zoom_factor
+    #     
+    #     if zoom_level > 2:
+    #         magnification_factor += 1
 
-    roi_width = zoom_factor
-    roi_height = zoom_factor
-    viewfinder_width = int(focus_width * zoom_factor * magnification_factor)
-    viewfinder_height = int(focus_height * zoom_factor * magnification_factor)
-    preview_xpos = (1920 - viewfinder_width) // 2
-    preview_ypos = (1080 - viewfinder_height) // 2
+    # roi_width = zoom_factor
+    # roi_height = zoom_factor
+    # viewfinder_width = int(focus_width * zoom_factor * magnification_factor)
+    # viewfinder_height = int(focus_height * zoom_factor * magnification_factor)
+    # preview_xpos = (1920 - viewfinder_width) // 2
+    # preview_ypos = (1080 - viewfinder_height) // 2
 
-    click.echo(f"{preview_xpos=}")
-    click.echo(f"{preview_ypos=}")
-    click.echo(f"{viewfinder_width=}")
-    click.echo(f"{viewfinder_height=}")
-    sys.exit()
+    # click.echo(f"{preview_xpos=}")
+    # click.echo(f"{preview_ypos=}")
+    # click.echo(f"{viewfinder_width=}")
+    # click.echo(f"{viewfinder_height=}")
+    # sys.exit()
 
     focus_libcamera_mode = f"{focus_width}:{focus_height}:{focus_bit_depth}:{focus_packing}"
     focus_gain = int(min(max(int(focus_iso) / 100, 1), 144))
@@ -425,14 +427,14 @@ def camera_focus_cmd(
         , f"{focus_libcamera_mode}"
         , "--hflip" if still_hflip else ""
         , "--vflip" if still_vflip else ""
-        , "--roi"
-        , f"{roi_xpos},{roi_ypos},{roi_width},{roi_height}"
-        , "--viewfinder-width"
-        , f"{viewfinder_width}" 
-        , "--viewfinder-height"
-        , f"{viewfinder_height}"
-        , "-p"
-        , f"{(1920-viewfinder_width)//2},{(1080-viewfinder_height)//2},{viewfinder_width},{viewfinder_height}"
+    #     , "--roi"
+    #     , f"{roi_xpos},{roi_ypos},{roi_width},{roi_height}"
+    #     , "--viewfinder-width"
+    #     , f"{viewfinder_width}" 
+    #     , "--viewfinder-height"
+    #     , f"{viewfinder_height}"
+    #     , "-p"
+    #     , f"{(1920-viewfinder_width)//2},{(1080-viewfinder_height)//2},{viewfinder_width},{viewfinder_height}"
         , "--gain", f"{focus_gain}"
         , "-t", f"{focus_time_ms}"
     ]
