@@ -17,13 +17,16 @@ def camerpi_grp(ctx):
     config = _init_config()
     cameras = _init_cameras()
 
-    config['default-camera'] = 'C0'
-    config['default-mode'] = 'M0'
-    config['default-resolution'] = list(cameras['C0']['modes']['M0']['resolutions'].values())[-1]['key']        
+    config['default-camera'] = list(cameras.keys())[-1]
+    config['default-mode'] = list(cameras[config['default-camera']]['modes'].keys())[-1]
+    # config['default-resolution'] = list(cameras['C0']['modes']['M0']['resolutions'].values())[-1]['key']        
+    config['default-resolution'] = list(cameras[config['default-camera']]['modes'][config['default-mode']]['resolutions'].keys())[-1]
 
     ctx.obj = {
         'cameras': cameras
         , 'config': config }
+
+    pp(config)
 
 
 def _init_cameras() -> dict:
@@ -41,14 +44,19 @@ def _init_cameras() -> dict:
     cameras = {}
     camera_mode_index = -1
     camera_mode_resolution_index = -1
-    
+
+    actionable_re= re.compile("Modes:|'S[RGB]{4}\d+|\d{1,2}\s?:|\d+x\d+") 
+    camera_re = re.compile(r"(\d{1,2}) : (\w+) \[(\d+)x(\d+)\] \(([^\)]+)\)$") 
+    mode_re = re.compile(r"(?:Modes: )?'(S([RGB]{4})(\d+)_(\w+))' : ")
+    resolution_re = re.compile(r"(\d+)x(\d+) \[(\d+\.\d+) fps - \((\d+), (\d+)\)/(\d+)x(\d+) crop\]") 
+
     for row in completed_process.stdout.decode(encoding="utf-8", errors="strict").split("\n"):
         row = row.strip()
-        if not re.match(r"Modes:|\d{1,2}\s?:|\d+x\d+", row):
+        if not actionable_re.match(row):
             # ignore empty lines and "decoration" lines
             continue
 
-        if ms := re.match(r"(\d{1,2}) : (\w+) \[(\d+)x(\d+)\] \(([^\)]+)\)$", row):
+        if ms := camera_re.match(row):
             # found a new camera device listing
             camera_key = f"C{ms.group(1)}"
             camera = cameras[camera_key] = {
@@ -59,7 +67,7 @@ def _init_cameras() -> dict:
             camera_modes = camera["modes"] = {}
             continue
         
-        if ms := re.match(r"Modes: '(S([RGB]{4})(\d+)_(\w+))' : ", row):
+        if ms := mode_re.match(row):
             # found start of modes list
             camera_mode_index += 1
             mode_key = f"M{camera_mode_index}"
@@ -72,10 +80,8 @@ def _init_cameras() -> dict:
             camera_mode_resolutions = camera_mode["resolutions"] = {}
             row = row[len(ms.group(0)):]
         
-        if ms := re.match(
-            r"(\d+)x(\d+) \[(\d+\.\d+) fps - \((\d+), (\d+)\)/(\d+)x(\d+) crop\]"
-            , row
-        ):  # found a resolution mode entry
+        if ms := resolution_re.match(row):
+            # found a resolution mode entry
             camera_mode_resolution_index += 1
             resolution_key = f"R{camera_mode_resolution_index}"
             camera_mode_resolutions[resolution_key] = {
@@ -340,7 +346,7 @@ def resolution_echo(resolution: dict) -> str:
 def camera_focus_cmd(
         obj
         , focus_time
-        , viewfinder_top_left
+        , viewfinder_pos
         , viewfinder_heading
         , viewfinder_scale
         , camera_index
