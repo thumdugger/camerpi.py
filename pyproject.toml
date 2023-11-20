@@ -26,6 +26,8 @@ classifiers=[
 dependencies = [
     "click"
     , "picamera2"
+    , "tomli"
+    , "logging"
     ,
 ]
 
