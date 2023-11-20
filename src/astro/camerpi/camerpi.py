@@ -1,32 +1,56 @@
 #!/usr/bin/python
 
 import click
+import logging
+import logging.config
 import math
 import re
 import subprocess
 import sys
 import tkinter as tk
+import tomli
 
 from pprint import pp
 
+
 @click.group("camerpi")
+@click.option(
+    "--verbose", "-v", "verbosity", count=True
+    , help="Increases verbosity level by one each time option is used")
 @click.pass_context
-def camerpi_grp(ctx):
+def camerpi_grp(ctx, verbosity):
     """Wrapper for libcamera-* commands"""
     
     config = _init_config()
     cameras = _init_cameras()
 
-    config['default-camera'] = list(cameras.keys())[-1]
-    config['default-mode'] = list(cameras[config['default-camera']]['modes'].keys())[-1]
-    # config['default-resolution'] = list(cameras['C0']['modes']['M0']['resolutions'].values())[-1]['key']        
-    config['default-resolution'] = list(cameras[config['default-camera']]['modes'][config['default-mode']]['resolutions'].keys())[-1]
-
     ctx.obj = {
-        'cameras': cameras
+        'verbosity': verbosity
+        , 'cameras': cameras
         , 'config': config }
+    
+    try:
+        config['default-camera'] = list(cameras.keys())[-1]
+        default_camera = cameras[config['default-camera']] 
+    except IndexError as e:
+        click.echo("no cameras found")
+        sys.exit(0)
 
-    pp(config)
+    try:
+        config['default-mode'] = list(default_camera['modes'].keys())[-1]
+        default_mode = default_camera['modes'][config['default-mode']]
+    except IndexError as e:
+        click.echo(f"no modes found for default camera {config['default-camera']}")
+        sys.exit(0)
+
+    try:
+        config['default-resolution'] = list(default_mode['resolutions'].keys())[-1]
+    except IndexError as e:
+        click.echo(f"no resolutions found for default mode {config['default-resolution']}")
+        sys.exit(0)
+
+    if verbosity:
+        click.echo(f"camerpi_grp: {ctx.obj=}")
 
 
 def _init_cameras() -> dict:
@@ -110,6 +134,17 @@ def _init_config() -> dict:
     config['preview_min_width'] = config['preview_max_width'] // 4 
     config['preview_min_height'] = config['preview_max_height'] // 4
     return config
+
+
+def _init_logging() -> dict:
+    logging_config = {
+        'loggers': {
+            'root': {
+
+            }
+        }
+    }
+    logging.config.fileConfig('~/.config/camerpi/logging.config.toml')
 
 
 @camerpi_grp.group("list", invoke_without_command=True)
