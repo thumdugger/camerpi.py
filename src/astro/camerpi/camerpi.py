@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #     camerpi.py is an astrophotography friendly front end for libcamera.
 #     Copyright (C) 2023  Scott Barnett
 #
@@ -122,12 +123,17 @@ def _init_cameras() -> dict:
             # found a resolution mode entry
             camera_mode_resolution_index += 1
             resolution_key = f"R{camera_mode_resolution_index}"
+            pixels_width = int(ms.group(1))
+            pixels_height = int(ms.group(2))
+            crop_pixels_width = int(ms.group(6))
+            crop_pixels_height = int(ms.group(7))
             camera_mode_resolutions[resolution_key] = {
                 "key": resolution_key
-                , "resolution": (int(ms.group(1)), int(ms.group(2)))
+                , "resolution": (pixels_width, pixels_height)
                 , "fps": float(ms.group(3))
                 , "crop-position": (int(ms.group(4)), int(ms.group(5)))
-                , "crop-resolution": (int(ms.group(6)), int(ms.group(7)))}
+                , "crop-resolution": (crop_pixels_width, crop_pixels_height)
+                , "binning-factor": (crop_pixels_width / pixels_width, crop_pixels_height / pixels_height)}
     return cameras
 
 
@@ -135,18 +141,26 @@ def _init_config() -> dict:
     """Builds configuration dictionary"""
 
     # TODO integrate this into the config command
-    config = {}
-    root = tk.Tk()
-    root.withdraw()
-    (width, height, scaling_factor) = (
-        root.winfo_screenwidth(), 
-        root.winfo_screenheight(),
-        # dpi * safe_window_proportion(=96%) * std_dpi(=96)
-        root.winfo_fpixels('1i') * .01)  
-    config['preview_max_width'] = int(width * scaling_factor)
-    config['preview_max_height'] = int(height * scaling_factor)
-    config['preview_min_width'] = config['preview_max_width'] // 4 
-    config['preview_min_height'] = config['preview_max_height'] // 4
+    try:
+        config = {}
+        root = tk.Tk()
+        root.withdraw()
+        (width, height, scaling_factor) = (
+            root.winfo_screenwidth(), 
+            root.winfo_screenheight(),
+            # dpi * safe_window_proportion(=96%) * std_dpi(=96)
+            root.winfo_fpixels('1i') * .01)
+        max_width = int(width * scaling_factor)
+        max_height = int(height * scaling_factor) 
+        config['viewfinder'] = {
+            'max_width': max_width
+            , 'max_height': max_height
+            , 'min_width': max_width // 4 
+            , 'min_height': max_height // 4
+            , 'scaling_factor': scaling_factor}
+    except tk.TclError:
+        click.echo("disabling viewfinder as no gui is available")
+        config['viewfinder'] = None
     return config
 
 
@@ -530,10 +544,58 @@ def camera_focus_cmd(
     default=False,
     show_default=True,
     help="Flip image vertically")
-def camera_still_cmd(exposure, still_timeout, still_iso, still_do_raw, still_do_hflip, still_do_vflip):
+@click.option(
+    "-C", "camera_index"
+    , help="Set camera to use (as from '--show-cameras')"
+    , type=int, default=None, show_default=False)
+@click.option(
+    "-M", "mode_index"
+    , help="Set camera mode to use (as from '--show-modes')"
+    , type=int, default=None, show_default=False)
+@click.option(
+    "-R", "resolution_index"
+    , help="Set camera mode resolution to use (as from '--show-resolutions')"
+    , type=int, default=None, show_default=False)
+@click.pass_obj
+def camera_still_cmd(
+        obj
+        , exposure
+        , still_timeout
+        , still_iso
+        , still_do_raw
+        , still_do_hflip
+        , still_do_vflip
+        , camera_index
+        , mode_index
+        , resolution_index) -> None:
     """Wrapper for libcamera-still command"""
-    still_gain = int(min(max(still_iso / 100, 1), 144))
-    still_timeout = int(still_timeout * 1000)
+
+    config = obj['config']
+    
+    # convert indexes to keys
+    camera_key = f"C{camera_index}" if camera_index else config['default-camera']
+    click.echo(f"{camera_key=}")
+    if not (camera := obj['cameras'].get(camera_key, {})):
+        raise RuntimeError(f"camera -{camera_key} not found")
+    
+    mode_key = f"M{mode_index}" if mode_index else config['default-mode']
+    click.echo(f"{mode_key=}")
+    if not (mode := camera['modes'].get(mode_key, {})):
+        raise RuntimeError(f"mode -{mode_key} not found")    
+    
+    resolution_key = f"R{resolution_index}" if resolution_index is not None else config['default-resolution']
+    click.echo(f"{resolution_index=}, {resolution_key=}")
+    if not (resolution := mode["resolutions"].get(resolution_key, {})):
+        raise RuntimeError(f"resolution -{resolution_key} not found")
+    
+    (sensor_pixels_width, sensor_pixels_height) = resolution['resolution']
+    sensor_bit_depth = mode['bit-depth']
+    sensor_packing = "P" if mode['packing'].endswith("P") else "U"
+    sensor_binning_factor = f"{resolution['binning-factor'][0]}x{resolution['binning-factor'][1]}"
+    sensor_mode = f"{sensor_pixels_width}:{sensor_pixels_height}:{sensor_bit_depth}:{sensor_packing}"
+
+    gain = int(min(max(still_iso / 100, 1), 144))
+    timeout_ms = int(still_timeout * 1000)
     
     if exposure.startswith("1/"):
         exposure_us = int(1.0/int(exposure[2:]) * 1_000_000)
@@ -542,26 +604,25 @@ def camera_still_cmd(exposure, still_timeout, still_iso, still_do_raw, still_do_
     else:
         exposure_us = int(1.0/int(exposure) * 1_000_000)
     
-    camera_cmd = [
-        "libcamera-still",
-        "--mode",
-        "8000:6000:10:P",
-        #"9152:6944:12:P",
-        "-n",
-        f"-t {still_timeout}" if still_timeout else "",
-        "--shutter",
-        f"{exposure_us}",
-        "--gain",
-        f"{still_gain}",
-        "--datetime",
-        "--latest",
-        "latest.jpg",
-        "--raw" if still_do_raw else "",
-        "--hflip" if still_do_hflip else "",
-        "--vflip" if still_do_vflip else "",
-    ]
+    camera_cmd = [arg for arg in [
+        "libcamera-still"
+        , "--mode", sensor_mode #"8000:6000:10:P", #"9152:6944:12:P",
+        , "--width", f"{sensor_pixels_width}"
+        , "--height", f"{sensor_pixels_height}"
+        , "-n", f"-t {timeout_ms}" if timeout_ms else "--immediate"
+        , "--shutter", f"{exposure_us}"
+        , "--gain", f"{gain}"
+        , "--datetime"
+        , "--latest", "latest.jpg"
+        , "--raw" if still_do_raw else ""
+        , "--hflip" if still_do_hflip else ""
+        , "--vflip" if still_do_vflip else ""
+    ] if arg]
     click.echo(f"{camera_cmd=}")
-    run_subprocess(camera_cmd)
+    click.echo(f"{sensor_binning_factor=}")
+    click.echo(f"running as: {' '.join(camera_cmd)}")
+    completed_process = subprocess.run(camera_cmd, capture_output=True)
+    click.echo(f"{completed_process=}")
 
 
 @camerpi_grp.command("timelapse")
